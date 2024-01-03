@@ -35,15 +35,32 @@ public class BloodShardNotifierPlugin extends Plugin
 	{
 		log.info("Blood Shard Notifier stopped!");
 	}
-
+	
 	@Subscribe
-	public void onItemSpawned(ItemSpawned itemSpawned)
-	{
-		TileItem item = itemSpawned.getItem();
-		if(item.getId() == ItemID.BLOOD_SHARD){
-			//Using a direct beep rather than the notify from the notifier plugin because this plugin
-			//is made for people who want to only get sound notifications for blood shards, but not other things
-			Toolkit.getDefaultToolkit().beep();
+	public void onStatChanged(StatChanged statChanged) {
+		final Skill skill = statChanged.getSkill();
+
+		// Modified from Nightfirecat's virtual level ups plugin as this info isn't (yet?) built in to statChanged event
+		final int xpAfter = client.getSkillExperience(skill);
+		final int levelAfter = Experience.getLevelForXp(xpAfter);
+		final int xpBefore = oldExperience.getOrDefault(skill, -1);
+		final int levelBefore = xpBefore == -1 ? -1 : Experience.getLevelForXp(xpBefore);
+
+		oldExperience.put(skill, xpAfter);
+
+		// Do not proceed if any of the following are true:
+		//  * xpBefore == -1              (don't fire when first setting new known value)
+		//  * xpAfter <= xpBefore         (do not allow 200m -> 200m exp drops)
+		//  * levelBefore >= levelAfter   (stop if if we're not actually reaching a new level)
+		//  * levelAfter > MAX_REAL_LEVEL && config says don't include virtual (level is virtual and config ignores virtual)
+		if (xpBefore == -1 || xpAfter <= xpBefore || levelBefore >= levelAfter ||
+				(levelAfter > Experience.MAX_REAL_LEVEL && !config.announceLevelUpIncludesVirtual())) {
+			return;
+		}
+
+		// If we get here, 'skill' was leveled up!
+		if (config.announceLevelUp()) {
+			soundEngine.playClip(Sound.LEVEL_UP, executor); //TODO: play custom sound
 		}
 	}
 
