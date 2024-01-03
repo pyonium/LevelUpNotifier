@@ -21,20 +21,28 @@ public class BloodShardNotifierPlugin extends Plugin
 	@Inject
 	private Client client;
 
+	private static final File CUSTOM_SOUNDS_DIR = new File(RuneLite.RUNELITE_DIR.getPath() + File.separator + "custom-drop-sounds");
+	private static final File CLICKER_SOUND_FILE = new File(CUSTOM_SOUNDS_DIR, "clicker.wav");
+
+	private Clip clip = null;
+
+	@Override
+	protected void startUp()
+	{
+		initSoundFiles();
+		updateHighlightedItemsList();
+	}
+
+	@Override
+	protected void shutDown()
+	{
+		clip.close();
+		clip = null;
+		highlightedItemsList = null;
+	}
+
 	//@Inject
 	//private BloodShardNotifierConfig config;
-
-	@Override
-	protected void startUp() throws Exception
-	{
-		log.info("Blood Shard Notifier started!");
-	}
-
-	@Override
-	protected void shutDown() throws Exception
-	{
-		log.info("Blood Shard Notifier stopped!");
-	}
 	
 	@Subscribe
 	public void onStatChanged(StatChanged statChanged) {
@@ -60,9 +68,65 @@ public class BloodShardNotifierPlugin extends Plugin
 
 		// If we get here, 'skill' was leveled up!
 		if (config.announceLevelUp()) {
-			soundEngine.playClip(Sound.LEVEL_UP, executor); //TODO: play custom sound
+			playSound(CLICKER_SOUND_FILE);
 		}
 	}
+
+	private void initSoundFiles()
+	{
+		if (!CUSTOM_SOUNDS_DIR.exists())
+		{
+			CUSTOM_SOUNDS_DIR.mkdirs();
+		}
+
+		for (File f : SOUND_FILES)
+		{
+			try
+			{
+				if (f.exists()) {
+					continue;
+				}
+				InputStream stream = CustomDropSoundsPlugin.class.getClassLoader().getResourceAsStream(f.getName());
+				OutputStream out = new FileOutputStream(f);
+				byte[] buffer = new byte[8 * 1024];
+				int bytesRead;
+				while ((bytesRead = stream.read(buffer)) != -1) {
+					out.write(buffer, 0, bytesRead);
+				}
+				out.close();
+				stream.close();
+			}  catch (Exception e) {
+				log.debug(e + ": " + f);
+			}
+		}
+	}
+
+	private void playSound(File f)
+	{
+		try
+		{
+			/* Leaving this removed for now. Calling this too many times causes client to hang.
+			if (clip != null)
+			{
+				clip.close();
+			}
+			 */
+
+			AudioInputStream is = AudioSystem.getAudioInputStream(f);
+			AudioFormat format = is.getFormat();
+			DataLine.Info info = new DataLine.Info(Clip.class, format);
+			clip = (Clip) AudioSystem.getLine(info);
+			clip.open(is);
+			setVolume(config.masterVolume());
+			clip.start();
+		}
+		catch (LineUnavailableException | UnsupportedAudioFileException | IOException e)
+		{
+			log.warn("Sound file error", e);
+		}
+	}
+
+	
 
 	@Provides
 	BloodShardNotifierConfig provideConfig(ConfigManager configManager)
